@@ -441,20 +441,21 @@ with tab1:
     st.header("⚙️ 1. Configurações & Bases")
     
     with st.expander("👤 Gestão de Usuários (Admin)", expanded=False):
-        c1, c2, c3 = st.columns(3)
-        novo_user = c1.text_input("Novo Usuário")
-        nova_senha = c2.text_input("Senha", type="password", key="new_pass")
-        novo_perfil = c3.selectbox("Perfil", ["Vendedor", "Gestor"])
-        
-        if st.button("➕ Adicionar Usuário"):
-            if not novo_user or not nova_senha:
-                st.error("Preencha todos os campos!")
-            else:
-                if add_usuario(novo_user, nova_senha, novo_perfil):
-                    st.success("Usuário criado com sucesso!")
-                    st.rerun()
+        with st.form("form_novo_user", clear_on_submit=True):
+            c1, c2, c3 = st.columns(3)
+            novo_user = c1.text_input("Novo Usuário")
+            nova_senha = c2.text_input("Senha", type="password")
+            novo_perfil = c3.selectbox("Perfil", ["Vendedor", "Gestor"])
+            
+            submit_user = st.form_submit_button("➕ Adicionar Usuário")
+            if submit_user:
+                if not novo_user.strip() or not nova_senha.strip():
+                    st.error("Preencha todos os campos!")
                 else:
-                    st.error("Username já existe!")
+                    if add_usuario(novo_user.strip(), nova_senha.strip(), novo_perfil):
+                        st.success("Usuário criado com sucesso!")
+                    else:
+                        st.error("Username já existe!")
         
         st.divider()
         st.markdown("**Usuários Cadastrados:**")
