@@ -55,6 +55,31 @@ def init_db():
             data_pedido TEXT
         )
     ''')
+    
+    # ── Migrações Seguras (Adicionando novas colunas) ──
+    try: c.execute("ALTER TABLE pedidos ADD COLUMN ttc_bees TEXT")
+    except: pass
+    try: c.execute("ALTER TABLE pedidos ADD COLUMN prazo_pagamento TEXT")
+    except: pass
+    try: c.execute("ALTER TABLE pedidos ADD COLUMN desconto_unidade REAL")
+    except: pass
+    try: c.execute("ALTER TABLE pedidos ADD COLUMN status_faturamento TEXT DEFAULT 'Pendente'")
+    except: pass
+
+    # ── Tabela de Usuários ──
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE,
+            password TEXT,
+            role TEXT
+        )
+    ''')
+    # Inserir o Admin padrão se a tabela estiver vazia
+    c.execute("SELECT COUNT(*) as qtd FROM usuarios")
+    if c.fetchone()["qtd"] == 0:
+        c.execute("INSERT INTO usuarios (username, password, role) VALUES ('admin', 'admin123', 'Gestor')")
+
     conn.commit()
     conn.close()
 
@@ -93,13 +118,20 @@ def salvar_produto_campanha(nome_camp, item):
     conn.commit()
     conn.close()
 
-def salvar_pedido(vendedor, cliente, campanha, cod_prod, desc, qtd_compra, qtd_boni, valor_total):
+def salvar_pedido(vendedor, cliente, campanha, cod_prod, desc, qtd_compra, qtd_boni, valor_total, ttc_bees, prazo, desc_unid):
     conn = get_db_connection()
     c = conn.cursor()
     c.execute('''
-        INSERT INTO pedidos (vendedor, cliente, campanha_nome, cod_prod, descricao, qtd_compra, qtd_bonificada, valor_total, data_pedido)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (vendedor, cliente, campanha, cod_prod, desc, qtd_compra, qtd_boni, valor_total, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        INSERT INTO pedidos (vendedor, cliente, campanha_nome, cod_prod, descricao, qtd_compra, qtd_bonificada, valor_total, data_pedido, ttc_bees, prazo_pagamento, desconto_unidade, status_faturamento)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendente')
+    ''', (vendedor, cliente, campanha, cod_prod, desc, qtd_compra, qtd_boni, valor_total, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ttc_bees, prazo, desc_unid))
+    conn.commit()
+    conn.close()
+
+def atualizar_status_pedido(pedido_id, novo_status):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute('UPDATE pedidos SET status_faturamento = ? WHERE id = ?', (novo_status, pedido_id))
     conn.commit()
     conn.close()
 
@@ -108,6 +140,42 @@ def get_pedidos():
     df = pd.read_sql_query("SELECT * FROM pedidos ORDER BY id DESC", conn)
     conn.close()
     return df
+
+# ── Funções de Usuário ──
+def validar_login(username, password):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("SELECT role FROM usuarios WHERE username = ? AND password = ?", (username, password))
+    user = c.fetchone()
+    conn.close()
+    if user:
+        return user["role"]
+    return None
+
+def get_usuarios():
+    conn = get_db_connection()
+    df = pd.read_sql_query("SELECT id, username, role FROM usuarios", conn)
+    conn.close()
+    return df
+
+def add_usuario(username, password, role):
+    conn = get_db_connection()
+    c = conn.cursor()
+    try:
+        c.execute("INSERT INTO usuarios (username, password, role) VALUES (?, ?, ?)", (username, password, role))
+        conn.commit()
+        ret = True
+    except sqlite3.IntegrityError:
+        ret = False # usuário já existe
+    conn.close()
+    return ret
+
+def del_usuario(user_id):
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute("DELETE FROM usuarios WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
@@ -230,27 +298,23 @@ if st.session_state["perfil_acesso"] is None:
     st.title("🍺 Simulador Comercial AMBEV")
     st.markdown("Selecione seu perfil para acessar a ferramenta:")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        with st.container(border=True):
-            st.subheader("👔 Gestor")
-            st.markdown("Gestão de bases, shelf, campanhas e painel de resultados.")
-            senha_gestor = st.text_input("Senha de Acesso", type="password", key="senha_g")
-            if st.button("Entrar como Gestor", use_container_width=True, type="primary"):
-                if senha_gestor == "admin123":
-                    st.session_state["perfil_acesso"] = "Gestor"
-                    st.rerun()
-                else:
-                    st.error("Senha incorreta!")
-                    
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         with st.container(border=True):
-            st.subheader("📱 Vendedor")
-            st.markdown("Simulador rápido de vendas e negociação em campo.")
-            if st.button("Acessar Simulador Vendas", use_container_width=True):
-                st.session_state["perfil_acesso"] = "Vendedor"
-                st.rerun()
-                
+            st.subheader("🔐 Login")
+            user_login = st.text_input("Usuário")
+            senha_login = st.text_input("Senha", type="password")
+            if st.button("Entrar", use_container_width=True, type="primary"):
+                if not user_login or not senha_login:
+                    st.error("Preencha usuário e senha!")
+                else:
+                    perfil = validar_login(user_login, senha_login)
+                    if perfil:
+                        st.session_state["perfil_acesso"] = perfil
+                        st.session_state["username_logado"] = user_login
+                        st.rerun()
+                    else:
+                        st.error("Usuário ou senha incorretos!")
     st.stop()
 
 
@@ -267,7 +331,7 @@ if st.session_state["perfil_acesso"] == "Vendedor":
     
     with st.container(border=True):
         st.subheader("👤 Identificação")
-        nome_vendedor = st.text_input("Seu Nome:")
+        nome_vendedor = st.text_input("Seu Nome:", value=st.session_state.get("username_logado", ""), disabled=True)
         nome_cliente = st.text_input("Cliente/PDV:")
         
     campanhas_ativas = get_campanhas()
@@ -303,6 +367,8 @@ if st.session_state["perfil_acesso"] == "Vendedor":
             <div style="margin-top: 15px; padding: 15px; background-color: #222; border-radius: 8px;">
                 <p style="margin:0; font-size: 14px;">Preço Base (Tabela): <b>{row_prod['ttv_tabela']}</b></p>
                 <p style="margin:0; font-size: 18px; color: #ff6b35;">Preço Prático Efetivo: <b>{row_prod['ttv_acao']}</b></p>
+                <br>
+                <p style="margin:0; font-size: 12px; color: #888;">TTC Tabela: {row_prod['ttc_tabela']} | TTC Ação: {row_prod['ttc_acao']}</p>
             </div>
             """, unsafe_allow_html=True)
             
@@ -317,18 +383,32 @@ if st.session_state["perfil_acesso"] == "Vendedor":
             
             qtd_ganha = qtd_compra // n_boni
             
-            valor_ttv_tabela = float(str(row_prod['ttv_tabela']).replace("R$ ", "").replace(".", "").replace(",", "."))
+            try: valor_ttv_tabela = float(str(row_prod['ttv_tabela']).replace("R$ ", "").replace(".", "").replace(",", "."))
+            except: valor_ttv_tabela = 0.0
+            
+            try: valor_ttv_acao = float(str(row_prod['ttv_acao']).replace("R$ ", "").replace(".", "").replace(",", "."))
+            except: valor_ttv_acao = 0.0
+
             total_pagar = qtd_compra * valor_ttv_tabela
+            desconto_unidade = valor_ttv_tabela - valor_ttv_acao
             
             c1, c2 = st.columns(2)
             c1.metric("🎁 Ele Ganha (Cxs)", f"+ {qtd_ganha}")
             c2.metric("💵 Total a Pagar", f"R$ {total_pagar:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
             
+            st.info(f"💡 Desconto Médio Unidade: **R$ {desconto_unidade:,.2f}**".replace(",", "X").replace(".", ",").replace("X", "."))
+
+            # NOVOS CAMPOS EXIGIDOS
+            st.divider()
+            st.subheader("📝 Dados Finais")
+            ttc_bees = st.text_input("TTC BEES atual")
+            prazo_pagto = st.text_input("Prazo de Pagamento")
+
             if st.button("✅ Confirmar Pedido", use_container_width=True, type="primary"):
-                if not nome_vendedor.strip() or not nome_cliente.strip():
-                    st.error("Preencha seu nome e o cliente para confirmar.")
+                if not nome_cliente.strip() or not ttc_bees.strip() or not prazo_pagto.strip():
+                    st.error("Preencha o cliente, o TTC BEES e o Prazo para confirmar.")
                 else:
-                    salvar_pedido(nome_vendedor, nome_cliente, campanha_sel, int(produto_sel), row_prod['descricao'], qtd_compra, qtd_ganha, total_pagar)
+                    salvar_pedido(nome_vendedor, nome_cliente, campanha_sel, int(produto_sel), row_prod['descricao'], qtd_compra, qtd_ganha, total_pagar, ttc_bees, prazo_pagto, desconto_unidade)
                     st.success("🎉 Pedido salvo com sucesso e enviado ao Gestor!")
                     st.balloons()
             
@@ -358,8 +438,37 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 # ABA 1 – INGESTÃO / SINCRONIZAÇÃO
 # ═════════════════════════════════════════════════════════════════════════════
 with tab1:
-    st.header("Bases de Dados (Upload Nuvem)")
+    st.header("⚙️ 1. Configurações & Bases")
     
+    with st.expander("👤 Gestão de Usuários (Admin)", expanded=False):
+        c1, c2, c3 = st.columns(3)
+        novo_user = c1.text_input("Novo Usuário")
+        nova_senha = c2.text_input("Senha", type="password", key="new_pass")
+        novo_perfil = c3.selectbox("Perfil", ["Vendedor", "Gestor"])
+        
+        if st.button("➕ Adicionar Usuário"):
+            if not novo_user or not nova_senha:
+                st.error("Preencha todos os campos!")
+            else:
+                if add_usuario(novo_user, nova_senha, novo_perfil):
+                    st.success("Usuário criado com sucesso!")
+                    st.rerun()
+                else:
+                    st.error("Username já existe!")
+        
+        st.divider()
+        st.markdown("**Usuários Cadastrados:**")
+        df_users = get_usuarios()
+        for idx, row in df_users.iterrows():
+            uc1, uc2, uc3 = st.columns([3, 3, 1])
+            uc1.write(f"**{row['username']}**")
+            uc2.write(f"_{row['role']}_")
+            if row['username'] != 'admin':
+                if uc3.button("🗑️ Excluir", key=f"del_{row['id']}"):
+                    del_usuario(row['id'])
+                    st.rerun()
+
+    st.divider()
     st.markdown("Faça o upload dos arquivos de base atualizados para alimentar o Simulador.")
 
     dpo_ok = "df_dpo" in st.session_state
@@ -572,10 +681,24 @@ with tab2:
     else:
         n_exato = (ttv_canal / desconto_un) if desconto_un > 0 else 0
 
-    n_agg        = max(int(n_exato), 1)
-    n_margem     = int(n_exato) + 1
-    preco_agg    = (n_agg    * ttv_canal) / (n_agg    + 1)
-    preco_margem = (n_margem * ttv_canal) / (n_margem + 1)
+    n_agg_sug    = max(int(n_exato), 1)
+    n_margem_sug = int(n_exato) + 1
+
+    st.divider()
+    st.subheader("⚙️ Ajuste Manual do Fator de Bonificação")
+    st.markdown("O simulador calculou a sugestão matemática abaixo, mas você pode ajustar a proporção (Compre X, Ganha Y) para forçar um formato específico.")
+    col_x, col_y = st.columns(2)
+    override_compre = col_x.number_input("Compre (Caixas)", value=n_agg_sug, min_value=1)
+    override_ganha = col_y.number_input("Ganha (Caixas)", value=1, min_value=1)
+
+    n_agg = override_compre
+    ganha_agg = override_ganha
+    preco_agg = (n_agg * ttv_canal) / (n_agg + ganha_agg)
+
+    n_margem = n_margem_sug
+    ganha_marg = 1
+    preco_margem = (n_margem * ttv_canal) / (n_margem + ganha_marg)
+
     ressarc_max  = volume_meta * desconto_un * fator
 
     st.divider()
@@ -596,20 +719,18 @@ with tab2:
     with c1:
         st.markdown(f"""
         <div class="card-agressivo">
-            <h3>🚀 Cenário Agressivo (Giro Rápido)</h3>
-            <p style="font-size:22px;font-weight:700;">Compre {n_agg} &nbsp;·&nbsp; Ganhe 1</p>
+            <h3>🚀 Cenário Customizado/Agressivo</h3>
+            <p style="font-size:22px;font-weight:700;">Compre {n_agg} &nbsp;·&nbsp; Ganhe {ganha_agg}</p>
             <p><b>Preço Prático:</b> <span style="font-size:20px;">R$ {preco_agg:.2f}</span></p><hr>
-            <p>✅ Ideal para queimar estoque crítico.<br>⚠️ Margem levemente comprimida.</p>
-            <p style="font-size:11px;">N=int({n_exato:.3f})={n_agg} | Preço=({n_agg}×{ttv_canal:.2f})/({n_agg+1})</p>
+            <p>✅ Ideal para queimar estoque crítico.</p>
         </div>""", unsafe_allow_html=True)
     with c2:
         st.markdown(f"""
         <div class="card-margem">
             <h3>🛡️ Cenário Proteção de Margem</h3>
-            <p style="font-size:22px;font-weight:700;">Compre {n_margem} &nbsp;·&nbsp; Ganhe 1</p>
+            <p style="font-size:22px;font-weight:700;">Compre {n_margem} &nbsp;·&nbsp; Ganhe {ganha_marg}</p>
             <p><b>Preço Prático:</b> <span style="font-size:20px;">R$ {preco_margem:.2f}</span></p><hr>
-            <p>✅ Protege o resultado da revenda.<br>⚖️ Equilíbrio giro × rentabilidade.</p>
-            <p style="font-size:11px;">N=int({n_exato:.3f})+1={n_margem} | Preço=({n_margem}×{ttv_canal:.2f})/({n_margem+1})</p>
+            <p>✅ Protege o resultado da revenda.</p>
         </div>""", unsafe_allow_html=True)
 
     if tipo_boni == "BONI TTV TABELA (Rebate)":
@@ -618,8 +739,8 @@ with tab2:
     st.divider()
     st.subheader("📋 Tabela Comparativa")
     st.dataframe(pd.DataFrame({
-        "Cenário":                ["Agressivo (Giro)", "Proteção de Margem"],
-        "Combo":                  [f"Compre {n_agg}, Ganhe 1", f"Compre {n_margem}, Ganhe 1"],
+        "Cenário":                ["Customizado/Agressivo", "Proteção de Margem"],
+        "Combo":                  [f"Compre {n_agg}, Ganhe {ganha_agg}", f"Compre {n_margem}, Ganhe {ganha_marg}"],
         "Preço Prático (R$/un)":  [f"R$ {preco_agg:.2f}", f"R$ {preco_margem:.2f}"],
         "Base Canal (R$/un)":     [f"R$ {ttv_canal:.2f}", f"R$ {ttv_canal:.2f}"],
         "Desconto Efetivo":       [f"{(ttv_canal-preco_agg)/ttv_canal*100:.1f}%", f"{(ttv_canal-preco_margem)/ttv_canal*100:.1f}%"],
@@ -674,7 +795,7 @@ with tab2:
                             val_critica = f"Val1: {fmt(v1)} | Val2: {fmt(v2)}"
                             estoque_total = q1 + q2
                 
-                fator_boni = f"[Compre {n_agg}, Ganhe 1]" if cenario_escolhido == "Cenário Agressivo" else f"[Compre {n_margem}, Ganhe 1]"
+                fator_boni = f"[Compre {n_agg}, Ganhe {ganha_agg}]" if cenario_escolhido == "Cenário Agressivo" else f"[Compre {n_margem}, Ganhe {ganha_marg}]"
                 
                 novo_item = {
                     "CÓD PROD": int(selected_code),
@@ -845,10 +966,57 @@ with tab6:
     if df_ped.empty:
         st.info("Nenhum pedido recebido ainda.")
     else:
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total de Pedidos", len(df_ped))
-        c2.metric("Caixas Vendidas", f"{df_ped['qtd_compra'].sum():,}".replace(",", "."))
-        c3.metric("Faturamento (Ação)", f"R$ {df_ped['valor_total'].sum():,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        # Filtros de tempo
+        df_ped["data_pedido_dt"] = pd.to_datetime(df_ped["data_pedido"], format="%Y-%m-%d %H:%M:%S", errors="coerce")
+        df_ped["mes_ano"] = df_ped["data_pedido_dt"].dt.to_period("M").astype(str)
+        df_ped["data_curta"] = df_ped["data_pedido_dt"].dt.date
         
-        st.divider()
-        st.dataframe(df_ped, use_container_width=True, hide_index=True)
+        c_filt1, c_filt2 = st.columns(2)
+        visao = c_filt1.selectbox("Filtro de Período", ["Todos", "Hoje", "Mês Atual", "Anual"])
+        
+        hoje_dt = datetime.now().date()
+        mes_atual = pd.Timestamp.now().to_period("M").astype(str)
+        ano_atual = hoje_dt.year
+        
+        if visao == "Hoje":
+            df_ped = df_ped[df_ped["data_curta"] == hoje_dt]
+        elif visao == "Mês Atual":
+            df_ped = df_ped[df_ped["mes_ano"] == mes_atual]
+        elif visao == "Anual":
+            df_ped = df_ped[df_ped["data_pedido_dt"].dt.year == ano_atual]
+
+        if df_ped.empty:
+            st.warning("Nenhum pedido no período selecionado.")
+        else:
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total de Pedidos", len(df_ped))
+            c2.metric("Caixas Vendidas", f"{df_ped['qtd_compra'].sum():,}".replace(",", "."))
+            c3.metric("Faturamento (Ação)", f"R$ {df_ped['valor_total'].sum():,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+            
+            st.divider()
+            
+            for idx, row in df_ped.iterrows():
+                try: 
+                    stat = row.get('status_faturamento', 'Pendente')
+                except:
+                    stat = 'Pendente'
+                    
+                cor = "🟢" if stat == "Faturado" else "🔴" if stat == "Cancelado" else "🟡"
+                
+                with st.expander(f"{cor} Pedido #{row['id']} - {row['cliente']} | R$ {row['valor_total']:,.2f}"):
+                    rc1, rc2, rc3 = st.columns(3)
+                    rc1.write(f"**Vendedor:** {row['vendedor']}")
+                    rc1.write(f"**Data:** {row['data_pedido']}")
+                    rc2.write(f"**Produto:** {row['descricao']}")
+                    rc2.write(f"**Qtd:** {row['qtd_compra']} (+{row['qtd_bonificada']} boni)")
+                    rc3.write(f"**TTC BEES:** {row.get('ttc_bees', '-')}")
+                    rc3.write(f"**Prazo:** {row.get('prazo_pagamento', '-')}")
+                    
+                    if stat == 'Pendente':
+                        vc1, vc2, vc3 = st.columns(3)
+                        if vc1.button("✅ Validar Faturamento", key=f"val_{row['id']}"):
+                            atualizar_status_pedido(row['id'], "Faturado")
+                            st.rerun()
+                        if vc2.button("❌ Cancelar", key=f"canc_{row['id']}"):
+                            atualizar_status_pedido(row['id'], "Cancelado")
+                            st.rerun()
