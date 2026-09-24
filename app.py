@@ -402,10 +402,10 @@ if st.session_state["perfil_acesso"] == "Vendedor":
             
             qtd_ganha = qtd_compra // n_boni
             
-            try: valor_ttv_tabela = float(str(row_prod['ttv_tabela']).replace("R$ ", "").replace(".", "").replace(",", "."))
+            try: valor_ttv_tabela = float(str(row_prod['ttv_tabela']).replace("R$ ", "").replace(",", ".").strip())
             except: valor_ttv_tabela = 0.0
             
-            try: valor_ttv_acao = float(str(row_prod['ttv_acao']).replace("R$ ", "").replace(".", "").replace(",", "."))
+            try: valor_ttv_acao = float(str(row_prod['ttv_acao']).replace("R$ ", "").replace(",", ".").strip())
             except: valor_ttv_acao = 0.0
 
             total_pagar = qtd_compra * valor_ttv_tabela
