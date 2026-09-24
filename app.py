@@ -86,6 +86,25 @@ def init_db():
 # Executa na inicialização
 init_db()
 
+def carregar_bases_globais():
+    conn = get_db_connection()
+    try:
+        if "df_dpo" not in st.session_state:
+            df_dpo = pd.read_sql_query("SELECT * FROM dpo_cache", conn)
+            if not df_dpo.empty:
+                st.session_state["df_dpo"] = df_dpo
+    except: pass
+    try:
+        if "df_csv" not in st.session_state:
+            df_csv = pd.read_sql_query("SELECT * FROM csv_cache", conn)
+            if not df_csv.empty:
+                st.session_state["df_csv"] = df_csv
+    except: pass
+    conn.close()
+
+# Tenta carregar as bases persistidas para a sessão do usuário
+carregar_bases_globais()
+
 def get_campanhas():
     conn = get_db_connection()
     df = pd.read_sql_query("SELECT nome FROM campanhas", conn)
@@ -470,7 +489,7 @@ with tab1:
                     st.rerun()
 
     st.divider()
-    st.markdown("Faça o upload dos arquivos de base atualizados para alimentar o Simulador.")
+    st.markdown("Faça o upload dos arquivos de base atualizados para alimentar o Simulador (isso atualizará o banco de dados para **todos os Vendedores**).")
 
     dpo_ok = "df_dpo" in st.session_state
     csv_ok = "df_csv" in st.session_state
@@ -478,10 +497,8 @@ with tab1:
     if dpo_ok and csv_ok:
         st.success(
             f"🚀 **Bases carregadas!**  \n"
-            f"📋 DPO: `{st.session_state.get('dpo_origem','—')}` · "
-            f"{len(st.session_state['df_dpo']):,} linhas  \n"
-            f"🔢 Fatores: `{st.session_state.get('csv_origem','—')}` · "
-            f"{len(st.session_state['df_csv']):,} SKUs  \n"
+            f"📋 DPO: {len(st.session_state['df_dpo']):,} linhas  \n"
+            f"🔢 Fatores: {len(st.session_state['df_csv']):,} SKUs  \n"
             f"Navegue pelas abas 2, 3 e 4 para simular."
         )
 
@@ -495,16 +512,22 @@ with tab1:
         erros = []
         if dpo_file:
             try:
-                st.session_state["df_dpo"] = _load_dpo(dpo_file)
-                st.session_state["dpo_origem"] = dpo_file.name
+                df = _load_dpo(dpo_file)
+                conn = get_db_connection()
+                df.to_sql("dpo_cache", conn, if_exists="replace", index=False)
+                conn.close()
+                st.session_state["df_dpo"] = df
                 dpo_ok = True
             except Exception as e:
                 erros.append(f"Erro DPO: {e}")
         
         if csv_file:
             try:
-                st.session_state["df_csv"] = _load_csv(csv_file)
-                st.session_state["csv_origem"] = csv_file.name
+                df = _load_csv(csv_file)
+                conn = get_db_connection()
+                df.to_sql("csv_cache", conn, if_exists="replace", index=False)
+                conn.close()
+                st.session_state["df_csv"] = df
                 csv_ok = True
             except Exception as e:
                 erros.append(f"Erro Fatores: {e}")
@@ -512,57 +535,8 @@ with tab1:
         if erros:
             for e in erros: st.error(e)
         elif dpo_file or csv_file:
-            st.success("✅ Bases atualizadas na sessão!")
+            st.success("✅ Bases atualizadas e salvas para todos os usuários!")
             st.rerun()
-
-    st.divider()
-
-    # ── Upload manual (fallback) ──────────────────────────────────────────────
-    with st.expander("📤 Upload manual (fallback)", expanded=not (dpo_ok and csv_ok)):
-        c1, c2 = st.columns(2, gap="large")
-        with c1:
-            st.subheader("📋 DPO (Validades)")
-            uploaded_dpo = st.file_uploader("Carregar DPO", type=["xlsm","xlsx"], key="dpo_up")
-        with c2:
-            st.subheader("🔢 Fatores de Conversão")
-            uploaded_csv = st.file_uploader("Carregar CSV", type=["csv"], key="csv_up")
-
-        if uploaded_dpo:
-            try:
-                xls = pd.ExcelFile(uploaded_dpo)
-                raw = pd.read_excel(xls, sheet_name=xls.sheet_names[0], header=None)
-                hr  = next((i for i,r in raw.iterrows()
-                            if any("digo" in str(v).lower() for v in r.values)), 5)
-                df  = pd.read_excel(xls, sheet_name=xls.sheet_names[0], header=hr)
-                df.columns = [str(c).strip() for c in df.columns]
-                for c in list(df.columns):
-                    if "digo" in c.lower().replace("ó","o"):
-                        df = df.rename(columns={c:"Código"}); break
-                df = df.dropna(subset=["Código"])
-                df["Código"] = pd.to_numeric(df["Código"], errors="coerce")
-                df = df.dropna(subset=["Código"])
-                df["Código"] = df["Código"].astype(int)
-                st.session_state["df_dpo"]    = df
-                st.session_state["dpo_origem"] = uploaded_dpo.name
-                dpo_ok = True
-                st.success(f"✅ DPO carregado: {len(df):,} linhas")
-            except Exception as e:
-                st.error(f"❌ {e}")
-
-        if uploaded_csv:
-            try:
-                df = pd.read_csv(uploaded_csv, sep=";", encoding="latin1")
-                df.columns = [str(c).strip() for c in df.columns]
-                df["Fator"]  = pd.to_numeric(df["Fator"],  errors="coerce")
-                df["Código"] = pd.to_numeric(df["Código"], errors="coerce")
-                df = df.dropna(subset=["Código","Fator"])
-                df["Código"] = df["Código"].astype(int)
-                st.session_state["df_csv"]    = df
-                st.session_state["csv_origem"] = uploaded_csv.name
-                csv_ok = True
-                st.success(f"✅ Fatores carregados: {len(df):,} SKUs")
-            except Exception as e:
-                st.error(f"❌ {e}")
 
     # ── Preview das bases ─────────────────────────────────────────────────────
     if dpo_ok or csv_ok:
@@ -578,7 +552,6 @@ with tab1:
                 df_show = st.session_state["df_csv"]
                 st.caption(f"Fatores · {len(df_show):,} SKUs")
                 st.dataframe(df_show.head(5), use_container_width=True, height=200)
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 # ABA 2 – SIMULADOR DE PREÇOS & COMBOS
