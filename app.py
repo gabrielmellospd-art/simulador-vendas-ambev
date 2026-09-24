@@ -651,44 +651,44 @@ with tab2:
     ressarc_max  = volume_meta * desconto_un * fator
 
     st.divider()
-    st.subheader("🎯 Sugestões Matemáticas (Compre X, Ganhe 1)")
-    st.markdown("O sistema calculou as duas estratégias de bonificação padrão. O objetivo é alcançar o **TTV Ação** de R$ {:.2f}.".format(ttv_acao))
-    
-    c1, c2 = st.columns(2, gap="large")
-    with c1:
-        st.markdown(f"""
-        <div class="card-agressivo">
-            <h3>BONI TTV AÇÃO (Rebaixa)</h3>
-            <p style="font-size:22px;font-weight:700;">Compre {n_acao_sug} &nbsp;·&nbsp; Ganhe 1</p>
-            <p><b>Preço Prático:</b> <span style="font-size:20px;">R$ {preco_acao_sug:.2f}</span></p><hr>
-            <p>Fator Exato: {n_exato_acao:.3f}</p>
-        </div>""", unsafe_allow_html=True)
-    with c2:
-        st.markdown(f"""
-        <div class="card-margem">
-            <h3>BONI TTV TABELA (Rebate)</h3>
-            <p style="font-size:22px;font-weight:700;">Compre {n_tab_sug} &nbsp;·&nbsp; Ganhe 1</p>
-            <p><b>Preço Prático:</b> <span style="font-size:20px;">R$ {preco_tab_sug:.2f}</span></p><hr>
-            <p>Fator Exato: {n_exato_tab:.3f} | Venda da bonificação em valor de Tabela.</p>
-        </div>""", unsafe_allow_html=True)
-
-    st.divider()
-    st.subheader("⚙️ Ajuste Manual / Fator Customizado")
-    st.markdown("Altere a quantidade para chegar no valor que mais se aproxime do TTV Ação definido.")
-    
-    col_x, col_y, col_z = st.columns([1, 1, 2], vertical_alignment="center")
-    override_compre = col_x.number_input("Customizado: Compre", value=n_acao_sug, min_value=1)
-    override_ganha = col_y.number_input("Customizado: Ganhe", value=1, min_value=1)
+    col_hdr, col_inputs = st.columns([1.5, 1], vertical_alignment="bottom")
+    with col_hdr:
+        st.subheader("🎯 Simulação de Combos")
+        st.markdown("O sistema calculou as duas estratégias de bonificação padrão. O objetivo é alcançar o **TTV Ação** de R$ {:.2f}.".format(ttv_acao))
+    with col_inputs:
+        st.caption("⚙️ Ajuste Manual / Fator Customizado")
+        cx, cy = st.columns(2)
+        override_compre = cx.number_input("Customizado: Compre", value=n_acao_sug, min_value=1)
+        override_ganha = cy.number_input("Customizado: Ganhe", value=1, min_value=1)
 
     preco_custom = (override_compre * ttv_canal) / (override_compre + override_ganha)
     mk_custom = ((ttc_acao / preco_custom) - 1) * 100 if preco_custom > 0 else 0
 
-    col_z.markdown(f"""
-    <div style="padding: 10px 20px; background-color: #262730; border-radius: 8px; border-left: 5px solid #FFD700;">
-        <h4 style="margin: 0; color: #aaa;">Resultado Customizado</h4>
-        <h2 style="margin: 0; color: #FFD700;">R$ {preco_custom:.2f} <span style="font-size: 14px; color: #fff;">/ un</span></h2>
-    </div>
-    """, unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3, gap="medium")
+    with c1:
+        st.markdown(f"""
+        <div class="card-agressivo" style="height: 100%;">
+            <h3>BONI TTV AÇÃO (Rebaixa)</h3>
+            <p style="font-size:20px;font-weight:700;">Compre {n_acao_sug} &nbsp;·&nbsp; Ganhe 1</p>
+            <p><b>Preço Prático:</b> <span style="font-size:18px;">R$ {preco_acao_sug:.2f}</span></p><hr>
+            <p style="font-size:12px;">Fator Exato: {n_exato_acao:.3f}</p>
+        </div>""", unsafe_allow_html=True)
+    with c2:
+        st.markdown(f"""
+        <div class="card-margem" style="height: 100%;">
+            <h3>BONI TTV TABELA (Rebate)</h3>
+            <p style="font-size:20px;font-weight:700;">Compre {n_tab_sug} &nbsp;·&nbsp; Ganhe 1</p>
+            <p><b>Preço Prático:</b> <span style="font-size:18px;">R$ {preco_tab_sug:.2f}</span></p><hr>
+            <p style="font-size:12px;">Fator: {n_exato_tab:.3f} | Boni preço Tab.</p>
+        </div>""", unsafe_allow_html=True)
+    with c3:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #444, #222); border-left: 5px solid #FFD700; border-radius: 12px; padding: 20px; color: #fff; height: 100%;">
+            <h3 style="color: #FFD700; margin-top:0;">Customizado Manual</h3>
+            <p style="font-size:20px;font-weight:700;">Compre {override_compre} &nbsp;·&nbsp; Ganhe {override_ganha}</p>
+            <p><b>Preço Prático:</b> <span style="font-size:18px;">R$ {preco_custom:.2f}</span></p><hr>
+            <p style="font-size:12px;">Simulação em tempo real.</p>
+        </div>""", unsafe_allow_html=True)
 
     st.divider()
     st.subheader("📋 Tabela Comparativa Geral")
