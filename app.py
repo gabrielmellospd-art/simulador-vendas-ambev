@@ -646,58 +646,46 @@ with tab2:
     n_acao_sug = max(int(n_exato_acao), 1)
     n_tab_sug  = max(int(n_exato_tab), 1)
 
-    preco_acao_sug = (n_acao_sug * ttv_canal) / (n_acao_sug + 1)
-    preco_tab_sug = (n_tab_sug * ttv_canal) / (n_tab_sug + 1)
-    ressarc_max  = volume_meta * desconto_un * fator
-
     st.divider()
     col_hdr, col_inputs = st.columns([1.5, 1], vertical_alignment="bottom")
     with col_hdr:
         st.subheader("🎯 Simulação de Combos")
-        st.markdown("O sistema calculou as duas estratégias de bonificação padrão. O objetivo é alcançar o **TTV Ação** de R$ {:.2f}.".format(ttv_acao))
+        st.markdown("Altere a proporção abaixo para ver em tempo real o **Preço Prático** que será alcançado em cada modalidade, tentando se aproximar do TTV Ação de R$ {:.2f}.".format(ttv_acao))
     with col_inputs:
-        st.caption("⚙️ Ajuste Manual / Fator Customizado")
+        st.caption("⚙️ Ajuste Manual da Proporção")
         cx, cy = st.columns(2)
         override_compre = cx.number_input("Customizado: Compre", value=n_acao_sug, min_value=1)
         override_ganha = cy.number_input("Customizado: Ganhe", value=1, min_value=1)
 
-    preco_custom = (override_compre * ttv_canal) / (override_compre + override_ganha)
-    mk_custom = ((ttc_acao / preco_custom) - 1) * 100 if preco_custom > 0 else 0
+    preco_acao = (override_compre * ttv_canal) / (override_compre + override_ganha)
+    preco_tab = ((override_compre - override_ganha) * ttv_canal) / override_compre if override_compre > 0 else 0
 
-    c1, c2, c3 = st.columns(3, gap="medium")
+    c1, c2 = st.columns(2, gap="large")
     with c1:
         st.markdown(f"""
-        <div class="card-agressivo" style="height: 100%;">
+        <div class="card-agressivo">
             <h3>BONI TTV AÇÃO (Rebaixa)</h3>
-            <p style="font-size:20px;font-weight:700;">Compre {n_acao_sug} &nbsp;·&nbsp; Ganhe 1</p>
-            <p><b>Preço Prático:</b> <span style="font-size:18px;">R$ {preco_acao_sug:.2f}</span></p><hr>
-            <p style="font-size:12px;">Fator Exato: {n_exato_acao:.3f}</p>
+            <p style="font-size:22px;font-weight:700;">Compre {override_compre} &nbsp;·&nbsp; Ganhe {override_ganha}</p>
+            <p><b>Preço Prático:</b> <span style="font-size:20px;">R$ {preco_acao:.2f}</span></p><hr>
+            <p style="font-size:12px;">Sugestão Matemática: Compre {n_acao_sug} (Fator {n_exato_acao:.3f})</p>
         </div>""", unsafe_allow_html=True)
     with c2:
         st.markdown(f"""
-        <div class="card-margem" style="height: 100%;">
+        <div class="card-margem">
             <h3>BONI TTV TABELA (Rebate)</h3>
-            <p style="font-size:20px;font-weight:700;">Compre {n_tab_sug} &nbsp;·&nbsp; Ganhe 1</p>
-            <p><b>Preço Prático:</b> <span style="font-size:18px;">R$ {preco_tab_sug:.2f}</span></p><hr>
-            <p style="font-size:12px;">Fator: {n_exato_tab:.3f} | Boni preço Tab.</p>
-        </div>""", unsafe_allow_html=True)
-    with c3:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #444, #222); border-left: 5px solid #FFD700; border-radius: 12px; padding: 20px; color: #fff; height: 100%;">
-            <h3 style="color: #FFD700; margin-top:0;">Customizado Manual</h3>
-            <p style="font-size:20px;font-weight:700;">Compre {override_compre} &nbsp;·&nbsp; Ganhe {override_ganha}</p>
-            <p><b>Preço Prático:</b> <span style="font-size:18px;">R$ {preco_custom:.2f}</span></p><hr>
-            <p style="font-size:12px;">Simulação em tempo real.</p>
+            <p style="font-size:22px;font-weight:700;">Compre {override_compre} &nbsp;·&nbsp; Ganhe {override_ganha}</p>
+            <p><b>Preço Prático:</b> <span style="font-size:20px;">R$ {preco_tab:.2f}</span></p><hr>
+            <p style="font-size:12px;">Sugestão Matemática: Compre {n_tab_sug} (Fator {n_exato_tab:.3f}) | Boni p/ Tabela.</p>
         </div>""", unsafe_allow_html=True)
 
     st.divider()
     st.subheader("📋 Tabela Comparativa Geral")
     st.dataframe(pd.DataFrame({
-        "Cenário":                ["BONI TTV AÇÃO", "BONI TTV TABELA", "Customizado Manual"],
-        "Combo":                  [f"Compre {n_acao_sug}, Ganhe 1", f"Compre {n_tab_sug}, Ganhe 1", f"Compre {override_compre}, Ganhe {override_ganha}"],
-        "Preço Prático (R$/un)":  [f"R$ {preco_acao_sug:.2f}", f"R$ {preco_tab_sug:.2f}", f"R$ {preco_custom:.2f}"],
-        "Base Canal (R$/un)":     [f"R$ {ttv_canal:.2f}", f"R$ {ttv_canal:.2f}", f"R$ {ttv_canal:.2f}"],
-        "Markup Cliente (Ação)":  [f"{((ttc_acao / preco_acao_sug) - 1) * 100 if preco_acao_sug > 0 else 0:.1f}%", f"{((ttc_acao / preco_tab_sug) - 1) * 100 if preco_tab_sug > 0 else 0:.1f}%", f"{mk_custom:.1f}%"],
+        "Cenário":                ["BONI TTV AÇÃO", "BONI TTV TABELA"],
+        "Combo Simulado":         [f"Compre {override_compre}, Ganhe {override_ganha}", f"Compre {override_compre}, Ganhe {override_ganha}"],
+        "Preço Prático (R$/un)":  [f"R$ {preco_acao:.2f}", f"R$ {preco_tab:.2f}"],
+        "Base Canal (R$/un)":     [f"R$ {ttv_canal:.2f}", f"R$ {ttv_canal:.2f}"],
+        "Markup Cliente (Ação)":  [f"{((ttc_acao / preco_acao) - 1) * 100 if preco_acao > 0 else 0:.1f}%", f"{((ttc_acao / preco_tab) - 1) * 100 if preco_tab > 0 else 0:.1f}%"],
     }), use_container_width=True, hide_index=True)
 
     st.divider()
@@ -716,7 +704,7 @@ with tab2:
                 nome_campanha = st.text_input("Nome da Campanha (Ex: AÇÕES SHELF - SET/2026)")
                 
         with col_c2:
-            cenario_escolhido = st.radio("Cenário de Combo que vai para o Vendedor", ["Boni TTV Ação", "Boni TTV Tabela", "Customizado Manual"], horizontal=True)
+            cenario_escolhido = st.radio("Cenário de Venda", ["Estratégia Boni Ação", "Estratégia Boni Tabela"], horizontal=True)
             validade_escolhida = st.radio("Validades Alvo", ["Apenas Validade 1 (Mais crítica)", "Validades 1 e 2"], horizontal=True)
             
         if st.button("💾 Cadastrar na Ação", type="primary", use_container_width=True):
@@ -748,12 +736,7 @@ with tab2:
                             val_critica = f"Val1: {fmt(v1)} | Val2: {fmt(v2)}"
                             estoque_total = q1 + q2
                 
-                if cenario_escolhido == "Boni TTV Ação":
-                    fator_boni = f"[Compre {n_acao_sug}, Ganhe 1]"
-                elif cenario_escolhido == "Boni TTV Tabela":
-                    fator_boni = f"[Compre {n_tab_sug}, Ganhe 1]"
-                else:
-                    fator_boni = f"[Compre {override_compre}, Ganhe {override_ganha}]"
+                fator_boni = f"[Compre {override_compre}, Ganhe {override_ganha}]"
                 
                 novo_item = {
                     "CÓD PROD": int(selected_code),
