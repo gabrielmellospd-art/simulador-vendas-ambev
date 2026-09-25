@@ -467,7 +467,7 @@ if st.session_state["perfil_acesso"] == "Vendedor":
             st.markdown("### Simulador de Pedido")
             qtd_compra = st.number_input("Quantidade Comprada (Caixas)", min_value=1, value=10, step=1)
 
-            qtd_ganha = qtd_compra // n_combo
+            qtd_ganha = (qtd_compra // n_compre) * n_ganhe if n_compre > 0 else 0
             
             fator_cx = 12 # Padrão Ambev, multiplicador para obter o valor da caixa
             total_pagar = qtd_compra * fator_cx * valor_ttv_tabela
