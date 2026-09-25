@@ -341,97 +341,142 @@ if st.session_state["perfil_acesso"] is None:
 # TELA DO VENDEDOR (MOBILE-FIRST)
 # =============================================================================
 if st.session_state["perfil_acesso"] == "Vendedor":
-    st.markdown("<h2 style='text-align: center; color: #2ec4b6;'>📱 Vendas & Negociação</h2>", unsafe_allow_html=True)
-    if st.button("⬅️ Sair (Trocar Perfil)", type="secondary"):
-        st.session_state["perfil_acesso"] = None
-        st.rerun()
-        
+    st.markdown("""
+        <style>
+            .block-container { padding-top: 1rem; padding-bottom: 0rem; }
+            .stButton>button { width: 100%; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    col_title, col_logout = st.columns([4, 1])
+    with col_title:
+        nome_vendedor = st.session_state.get("username_logado", "Vendedor")
+        st.markdown("<h2 style='color:#2ec4b6;margin-bottom:-15px;'>📱 Portal de Negócios</h2>", unsafe_allow_html=True)
+    with col_logout:
+        if st.button("Sair 🚪"):
+            st.session_state["perfil_acesso"] = None
+            st.rerun()
+
     st.divider()
-    
-    with st.container(border=True):
-        st.subheader("👤 Identificação")
-        nome_vendedor = st.text_input("Seu Nome:", value=st.session_state.get("username_logado", ""), disabled=True)
-        nome_cliente = st.text_input("Cliente/PDV:")
-        
+
+    nome_cliente = st.text_input("🔍 Buscar PDV (Código ou Nome)")
+
     campanhas_ativas = get_campanhas()
     if not campanhas_ativas:
         st.warning("Nenhuma campanha ativa no momento.")
         st.stop()
-        
-    campanha_sel = st.selectbox("🚀 Selecione a Campanha", [""] + campanhas_ativas)
-    
+
+    col_campanha, col_produto_col = st.columns(2)
+    with col_campanha:
+        campanha_sel = st.selectbox("Escolher Ação", [""] + campanhas_ativas)
+
     if campanha_sel:
         skus_df = get_skus_campanha(campanha_sel)
         if skus_df.empty:
             st.warning("Esta campanha não possui SKUs cadastrados.")
         else:
             sku_opcoes = dict(zip(skus_df["cod_prod"], skus_df["descricao"]))
-            def fmt_sku_vend(cod):
-                return f"{int(cod)} - {sku_opcoes[cod]}"
-                
-            produto_sel = st.selectbox("📦 Selecione o Produto", skus_df["cod_prod"].tolist(), format_func=fmt_sku_vend)
-            
+            def fmt_sku_vend(cod): return f"{int(cod)} - {sku_opcoes[cod]}"
+            with col_produto_col:
+                produto_sel = st.selectbox("Selecione o Produto", skus_df["cod_prod"].tolist(), format_func=fmt_sku_vend)
+
             row_prod = skus_df[skus_df["cod_prod"] == produto_sel].iloc[0]
-            
-            st.markdown(f"""
-            <div class="card-agressivo" style="margin-top: 15px;">
-                <h4 style="margin:0;">Regra da Bonificação:</h4>
-                <h2 style="margin:5px 0; color: #1a1a1a;">{row_prod['fator_boni']}</h2>
-                <p style="margin:0;"><b>Validade:</b> {row_prod['validade']}</p>
-                <p style="margin:0;"><b>Estoque Disponível:</b> {row_prod['estoque']} cxs</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            st.markdown(f"""
-            <div style="margin-top: 15px; padding: 15px; background-color: #222; border-radius: 8px;">
-                <p style="margin:0; font-size: 14px;">Preço Base (Tabela): <b>{row_prod['ttv_tabela']}</b></p>
-                <p style="margin:0; font-size: 18px; color: #ff6b35;">Preço Prático Efetivo: <b>{row_prod['ttv_acao']}</b></p>
-                <br>
-                <p style="margin:0; font-size: 12px; color: #888;">TTC Tabela: {row_prod['ttc_tabela']} | TTC Ação: {row_prod['ttc_acao']}</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            st.divider()
-            st.subheader("🛒 Simulador de Pedido")
-            
-            qtd_compra = st.number_input("Quantidade Comprada (Caixas)", min_value=1, value=10, step=1)
-            
+
             import re
-            match = re.search(r'Compre (\d+)', row_prod['fator_boni'])
-            n_boni = int(match.group(1)) if match else 999999
-            
-            qtd_ganha = qtd_compra // n_boni
-            
+            match_boni = re.search(r'Compre (\d+)', str(row_prod['fator_boni']))
+            n_boni_base = int(match_boni.group(1)) if match_boni else 1
+
             try: valor_ttv_tabela = float(str(row_prod['ttv_tabela']).replace("R$ ", "").replace(",", ".").strip())
             except: valor_ttv_tabela = 0.0
-            
             try: valor_ttv_acao = float(str(row_prod['ttv_acao']).replace("R$ ", "").replace(",", ".").strip())
             except: valor_ttv_acao = 0.0
+            try: valor_ttc_tabela = float(str(row_prod['ttc_tabela']).replace("R$ ", "").replace(",", ".").strip())
+            except: valor_ttc_tabela = 0.0
+            try: valor_ttc_acao = float(str(row_prod['ttc_acao']).replace("R$ ", "").replace(",", ".").strip())
+            except: valor_ttc_acao = 0.0
 
+            tipo_boni_prod = "TABELA" if "TABELA" in str(row_prod.get('fator_boni', '')).upper() else "AÇÃO"
+
+            # SLIDER DE AJUSTE DE MARGEM
+            with st.expander("⚙️ Ajuste de Condição (Opcional)", expanded=False):
+                st.info("Deslize para iniciar a negociação com um preço maior e preservar verba.")
+                ttv_min = min(valor_ttv_acao, valor_ttv_tabela)
+                ttv_max = max(valor_ttv_acao, valor_ttv_tabela)
+                if ttv_min < ttv_max:
+                    ttv_negociado = st.slider(
+                        "TTV Ofertado ao Cliente (R$)",
+                        min_value=ttv_min, max_value=ttv_max,
+                        value=ttv_min, step=0.01
+                    )
+                else:
+                    ttv_negociado = valor_ttv_acao
+
+            # RECÁLCULO AUTOMÁTICO
+            desconto_pratico = valor_ttv_tabela - ttv_negociado
+            desconto_cx = desconto_pratico * 12
+
+            if desconto_pratico > 0:
+                n_exato = ttv_negociado / desconto_pratico if tipo_boni_prod == "AÇÃO" else valor_ttv_tabela / desconto_pratico
+            else:
+                n_exato = 999
+            n_combo = max(int(n_exato), 1)
+
+            # CARD EXECUTIVO
+            st.markdown("### Resumo da Oferta")
+            st.markdown(f"""
+<div style='background-color:#1e1e1e;padding:15px;border-radius:8px;border-left:5px solid #E50914;'>
+    <h4 style='margin-bottom:5px;color:white;'>
+        TTV TABELA = R$ {valor_ttv_tabela:.2f}
+        <span style='color:gray;'> vs </span>
+        <span style='color:#4CAF50;'>TTV AÇÃO = R$ {ttv_negociado:.2f}</span>
+    </h4>
+    <p style='color:#A0A0A0;font-size:14px;margin-top:0px;'>
+        Desconto Un: <b>R$ {desconto_pratico:.2f}</b> | Desconto Cx: <b>R$ {desconto_cx:.2f}</b>
+    </p>
+    <p style='color:#d3d3d3;font-size:14px;margin-bottom:0px;'>
+        TTC Tabela: R$ {valor_ttc_tabela:.2f} | TTC Ação sugerido: R$ {valor_ttc_acao:.2f}
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+            st.info(f"**Regra:** [ Compre {n_combo}, Ganhe 1 ]  |  **Boni:** {tipo_boni_prod}\n\n**Validade:** {row_prod['validade']}  |  **Estoque:** {row_prod['estoque']} cxs")
+
+            # SIMULADOR
+            st.markdown("### Simulador de Pedido")
+            qtd_compra = st.number_input("Quantidade Comprada (Caixas)", min_value=1, value=10, step=1)
+
+            qtd_ganha = qtd_compra // n_combo
             total_pagar = qtd_compra * valor_ttv_tabela
-            desconto_unidade = valor_ttv_tabela - valor_ttv_acao
-            
-            c1, c2 = st.columns(2)
-            c1.metric("🎁 Ele Ganha (Cxs)", f"+ {qtd_ganha}")
-            c2.metric("💵 Total a Pagar", f"R$ {total_pagar:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
-            
-            st.info(f"💡 Desconto Médio Unidade: **R$ {desconto_unidade:,.2f}**".replace(",", "X").replace(".", ",").replace("X", "."))
+            valor_boni = qtd_ganha * ttv_negociado if tipo_boni_prod == "AÇÃO" else qtd_ganha * valor_ttv_tabela
 
-            # NOVOS CAMPOS EXIGIDOS
+            st.success(f"🎁 **Ele Ganha (Cxs): + {qtd_ganha}**")
+
+            col_pagar, col_boni_v = st.columns(2)
+            with col_pagar:
+                st.markdown(f"<h3 style='text-align:center;color:white;'>Total a Pagar<br><span style='color:#4CAF50;'>R$ {total_pagar:,.2f}</span></h3>", unsafe_allow_html=True)
+            with col_boni_v:
+                st.markdown(f"<h3 style='text-align:center;color:white;'>Valor Boni<br><span style='color:#FFC107;'>R$ {valor_boni:,.2f}</span></h3>", unsafe_allow_html=True)
+
+            st.markdown(f"<p style='text-align:center;color:gray;font-size:18px;'>TOTAL RESSARCIMENTO: <b>R$ {valor_boni:,.2f}</b></p>", unsafe_allow_html=True)
+
             st.divider()
-            st.subheader("📝 Dados Finais")
-            ttc_bees = st.text_input("TTC BEES atual")
+
+            st.markdown("### 📝 Dados Finais")
+            ttc_bees = st.text_input("TTC BEES Atual")
             prazo_pagto = st.text_input("Prazo de Pagamento")
 
             if st.button("✅ Confirmar Pedido", use_container_width=True, type="primary"):
-                if not nome_cliente.strip() or not ttc_bees.strip() or not prazo_pagto.strip():
-                    st.error("Preencha o cliente, o TTC BEES e o Prazo para confirmar.")
+                if not nome_cliente.strip() or not ttc_bees.strip():
+                    st.error("Preencha o PDV e o TTC BEES para confirmar.")
                 else:
+                    desconto_unidade = valor_ttv_tabela - ttv_negociado
                     salvar_pedido(nome_vendedor, nome_cliente, campanha_sel, int(produto_sel), row_prod['descricao'], qtd_compra, qtd_ganha, total_pagar, ttc_bees, prazo_pagto, desconto_unidade)
-                    st.success("🎉 Pedido salvo com sucesso e enviado ao Gestor!")
+                    st.success(f"🎉 Pedido salvo! TTV Negociado: R$ {ttv_negociado:.2f}")
                     st.balloons()
-            
+
     st.stop()
+
+
 
 
 # =============================================================================
