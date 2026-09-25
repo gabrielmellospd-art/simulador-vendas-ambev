@@ -421,25 +421,36 @@ if st.session_state["perfil_acesso"] == "Vendedor":
                 n_exato = 999
             n_combo = max(int(n_exato), 1)
 
-            # CARD EXECUTIVO
-            st.markdown("### Resumo da Oferta")
+            # CARD 1 — FATOR DE CONVERSÃO
             st.markdown(f"""
-<div style='background-color:#1e1e1e;padding:15px;border-radius:8px;border-left:5px solid #E50914;'>
-    <h4 style='margin-bottom:5px;color:white;'>
-        TTV TABELA = R$ {valor_ttv_tabela:.2f}
-        <span style='color:gray;'> vs </span>
-        <span style='color:#4CAF50;'>TTV AÇÃO = R$ {ttv_negociado:.2f}</span>
-    </h4>
-    <p style='color:#A0A0A0;font-size:14px;margin-top:0px;'>
-        Desconto Un: <b>R$ {desconto_pratico:.2f}</b> | Desconto Cx: <b>R$ {desconto_cx:.2f}</b>
-    </p>
-    <p style='color:#d3d3d3;font-size:14px;margin-bottom:0px;'>
-        TTC Tabela: R$ {valor_ttc_tabela:.2f} | TTC Ação sugerido: R$ {valor_ttc_acao:.2f}
-    </p>
+<div class="card-agressivo" style="margin-top:15px;">
+    <h2 style="margin:0 0 8px 0;">[ Compre {n_combo}, Leve {n_combo + 1} ]</h2>
+    <p style="margin:0;font-size:15px;"><b>Boni:</b> {tipo_boni_prod} &nbsp;|&nbsp; <b>Validade:</b> {row_prod['validade']} &nbsp;|&nbsp; <b>Estoque:</b> {row_prod['estoque']} cxs</p>
 </div>
 """, unsafe_allow_html=True)
 
-            st.info(f"**Regra:** [ Compre {n_combo}, Ganhe 1 ]  |  **Boni:** {tipo_boni_prod}\n\n**Validade:** {row_prod['validade']}  |  **Estoque:** {row_prod['estoque']} cxs")
+            # CARD 2 — COMPARATIVO DE PREÇOS
+            st.markdown(f"""
+<div style='background-color:#1e1e1e;padding:18px 20px;border-radius:8px;border-left:5px solid #E50914;margin-top:10px;text-align:center;'>
+    <p style='margin:0;font-size:16px;color:#d3d3d3;font-weight:bold;'>TTV TABELA</p>
+    <p style='margin:0;font-size:24px;color:white;font-weight:700;'>R$ {valor_ttv_tabela:.2f}</p>
+    <p style='margin:6px 0;font-size:18px;color:#888;font-weight:bold;'>vs</p>
+    <p style='margin:0;font-size:16px;color:#4CAF50;font-weight:bold;'>TTV AÇÃO</p>
+    <p style='margin:0;font-size:24px;color:#4CAF50;font-weight:700;'>R$ {ttv_negociado:.2f}</p>
+    <hr style='border-color:#333;margin:12px 0;'>
+    <p style='margin:0;font-size:14px;color:#A0A0A0;'>
+        Desconto Un: <b style='color:white;'>R$ {desconto_pratico:.2f}</b>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        Desconto Cx: <b style='color:white;'>R$ {desconto_cx:.2f}</b>
+    </p>
+    <hr style='border-color:#333;margin:12px 0;'>
+    <p style='margin:0;font-size:13px;color:#888;'>
+        TTC Tabela: <b style='color:#d3d3d3;'>R$ {valor_ttc_tabela:.2f}</b>
+        &nbsp;&nbsp;|&nbsp;&nbsp;
+        TTC Ação: <b style='color:#d3d3d3;'>R$ {valor_ttc_acao:.2f}</b>
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
             # SIMULADOR
             st.markdown("### Simulador de Pedido")
@@ -456,8 +467,6 @@ if st.session_state["perfil_acesso"] == "Vendedor":
                 st.markdown(f"<h3 style='text-align:center;color:white;'>Total a Pagar<br><span style='color:#4CAF50;'>R$ {total_pagar:,.2f}</span></h3>", unsafe_allow_html=True)
             with col_boni_v:
                 st.markdown(f"<h3 style='text-align:center;color:white;'>Valor Boni<br><span style='color:#FFC107;'>R$ {valor_boni:,.2f}</span></h3>", unsafe_allow_html=True)
-
-            st.markdown(f"<p style='text-align:center;color:gray;font-size:18px;'>TOTAL RESSARCIMENTO: <b>R$ {valor_boni:,.2f}</b></p>", unsafe_allow_html=True)
 
             st.divider()
 
