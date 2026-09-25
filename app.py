@@ -383,8 +383,10 @@ if st.session_state["perfil_acesso"] == "Vendedor":
             row_prod = skus_df[skus_df["cod_prod"] == produto_sel].iloc[0]
 
             import re
-            match_boni = re.search(r'Compre (\d+)', str(row_prod['fator_boni']))
-            n_boni_base = int(match_boni.group(1)) if match_boni else 1
+            fator_str = str(row_prod.get('fator_boni', ''))
+            match_boni = re.search(r'Compre (\d+).*Ganhe (\d+)', fator_str, re.IGNORECASE)
+            n_compre_base = int(match_boni.group(1)) if match_boni else 1
+            n_ganhe_base = int(match_boni.group(2)) if match_boni else 1
 
             try: valor_ttv_tabela = float(str(row_prod['ttv_tabela']).replace("R$ ", "").replace(",", ".").strip())
             except: valor_ttv_tabela = 0.0
@@ -395,36 +397,45 @@ if st.session_state["perfil_acesso"] == "Vendedor":
             try: valor_ttc_acao = float(str(row_prod['ttc_acao']).replace("R$ ", "").replace(",", ".").strip())
             except: valor_ttc_acao = 0.0
 
-            tipo_boni_prod = "TABELA" if "TABELA" in str(row_prod.get('fator_boni', '')).upper() else "AÇÃO"
+            tipo_boni_prod = "TABELA" if "TABELA" in fator_str.upper() else "AÇÃO"
+
+            if tipo_boni_prod == "AÇÃO":
+                ttv_base_promo = (n_compre_base * valor_ttv_tabela) / (n_compre_base + n_ganhe_base)
+            else:
+                ttv_base_promo = ((n_compre_base - n_ganhe_base) * valor_ttv_tabela) / n_compre_base if n_compre_base > 0 else valor_ttv_tabela
 
             # SLIDER DE AJUSTE DE MARGEM
             with st.expander("⚙️ Ajuste de Condição (Opcional)", expanded=False):
                 st.info("Deslize para iniciar a negociação com um preço maior e preservar verba.")
-                ttv_min = min(valor_ttv_acao, valor_ttv_tabela)
-                ttv_max = max(valor_ttv_acao, valor_ttv_tabela)
+                ttv_min = min(ttv_base_promo, valor_ttv_tabela)
+                ttv_max = max(ttv_base_promo, valor_ttv_tabela)
                 if ttv_min < ttv_max:
                     ttv_negociado = st.slider(
                         "TTV Ofertado ao Cliente (R$)",
                         min_value=ttv_min, max_value=ttv_max,
-                        value=ttv_min, step=0.01
+                        value=ttv_base_promo, step=0.01
                     )
                 else:
-                    ttv_negociado = valor_ttv_acao
+                    ttv_negociado = ttv_base_promo
 
-            # RECÁLCULO AUTOMÁTICO
+            # RECÁLCULO AUTOMÁTICO SE MOVER SLIDER
             desconto_pratico = valor_ttv_tabela - ttv_negociado
             desconto_cx = desconto_pratico * 12
+            
+            n_compre = n_compre_base
+            n_ganhe = n_ganhe_base
 
-            if desconto_pratico > 0:
-                n_exato = ttv_negociado / desconto_pratico if tipo_boni_prod == "AÇÃO" else valor_ttv_tabela / desconto_pratico
-            else:
-                n_exato = 999
-            n_combo = max(int(n_exato), 1)
+            if abs(ttv_negociado - ttv_base_promo) > 0.01:
+                if desconto_pratico > 0:
+                    n_ganhe = 1 # Simplificação pra negociação livre
+                    n_compre = max(int(ttv_negociado / desconto_pratico if tipo_boni_prod == "AÇÃO" else valor_ttv_tabela / desconto_pratico), 1)
+                else:
+                    n_compre = 999
 
             # CARD 1 — FATOR DE CONVERSÃO
             st.markdown(f"""
 <div class="card-agressivo" style="margin-top:15px;">
-    <h2 style="margin:0 0 8px 0;">[ Compre {n_combo}, Leve {n_combo + 1} ]</h2>
+    <h2 style="margin:0 0 8px 0; font-size: 26px; white-space: nowrap;">Compre {n_compre}, Ganhe {n_ganhe}</h2>
     <p style="margin:0;font-size:15px;"><b>Boni:</b> {tipo_boni_prod} &nbsp;|&nbsp; <b>Validade:</b> {row_prod['validade']} &nbsp;|&nbsp; <b>Estoque:</b> {row_prod['estoque']} cxs</p>
 </div>
 """, unsafe_allow_html=True)
@@ -457,8 +468,10 @@ if st.session_state["perfil_acesso"] == "Vendedor":
             qtd_compra = st.number_input("Quantidade Comprada (Caixas)", min_value=1, value=10, step=1)
 
             qtd_ganha = qtd_compra // n_combo
-            total_pagar = qtd_compra * valor_ttv_tabela
-            valor_boni = qtd_ganha * ttv_negociado if tipo_boni_prod == "AÇÃO" else qtd_ganha * valor_ttv_tabela
+            
+            fator_cx = 12 # Padrão Ambev, multiplicador para obter o valor da caixa
+            total_pagar = qtd_compra * fator_cx * valor_ttv_tabela
+            valor_boni = qtd_ganha * fator_cx * ttv_negociado if tipo_boni_prod == "AÇÃO" else qtd_ganha * fator_cx * valor_ttv_tabela
 
             st.success(f"🎁 **Ele Ganha (Cxs): + {qtd_ganha}**")
 
@@ -790,7 +803,10 @@ with tab2:
                             val_critica = f"Val1: {fmt(v1)} | Val2: {fmt(v2)}"
                             estoque_total = q1 + q2
                 
-                fator_boni = f"[Compre {override_compre}, Ganhe {override_ganha}]"
+                if cenario_escolhido == "Estratégia Boni Ação":
+                    fator_boni = f"Compre {override_compre}, Ganhe {override_ganha} (AÇÃO)"
+                else:
+                    fator_boni = f"Compre {override_compre}, Ganhe {override_ganha} (TABELA)"
                 
                 novo_item = {
                     "CÓD PROD": int(selected_code),
