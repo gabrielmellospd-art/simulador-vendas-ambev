@@ -434,9 +434,9 @@ if st.session_state["perfil_acesso"] == "Vendedor":
 
             # CARD 1 — FATOR DE CONVERSÃO
             st.markdown(f"""
-<div class="card-agressivo" style="margin-top:15px;">
-    <h2 style="margin:0 0 8px 0; font-size: 26px; white-space: nowrap;">Compre {n_compre}, Ganhe {n_ganhe}</h2>
-    <p style="margin:0;font-size:15px;"><b>Boni:</b> {tipo_boni_prod} &nbsp;|&nbsp; <b>Validade:</b> {row_prod['validade']} &nbsp;|&nbsp; <b>Estoque:</b> {row_prod['estoque']} cxs</p>
+<div class="card-agressivo" style="margin-top:15px; text-align:center;">
+    <h2 style="margin:0 0 8px 0; font-size: 28px; white-space: nowrap; text-transform: uppercase;">Compre {n_compre}, Ganhe {n_ganhe}</h2>
+    <p style="margin:0; font-size:14px; white-space: nowrap;"><b>Validade:</b> {row_prod['validade']} &nbsp;|&nbsp; <b>Estoque:</b> {row_prod['estoque']} cxs</p>
 </div>
 """, unsafe_allow_html=True)
 
